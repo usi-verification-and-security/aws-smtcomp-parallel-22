@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import json
 import logging
 import os
@@ -67,14 +68,14 @@ class Runner:
             return hostfile_path, totalWorkerNodes
 
     def get_command(self, input_json):
-        problem_path = input_json.get("problem_path")
+        problem_path = input_json.get("formula_file")
         worker_node_ips = input_json.get("worker_node_ips", [])
         leader_ip = socket.gethostbyname(socket.gethostname())
         # leader_ip = input_json.get("leaderIp")
 
         combined_hostfile, totalWorkerNodes = self.create_hostfile(worker_node_ips, leader_ip, self.request_directory)
 
-        run_list = ["/competition/run_smts.sh"]
+        run_list = ["/competition/run_solver.sh"]
         run_list.append(combined_hostfile)
         run_list.append(problem_path)
         run_list.append(str(totalWorkerNodes))
@@ -99,10 +100,10 @@ class SMTSParser:
 if __name__ == "__main__":
     request_directory = sys.argv[1]
     runner = Runner(request_directory)
-    
+
     input_json = runner.get_input_json()
     cmd = runner.get_command(input_json)
-    
+
     output = runner.run(cmd)
     result = SMTSParser.get_result(output["stdout"])
     logging.info(f"RESULT: {result}")
@@ -114,6 +115,6 @@ if __name__ == "__main__":
             "stderr_path": output["stderr"]
         }
     }
-    
+
     with open(os.path.join(request_directory, "solver_out.json"), "w+") as f:
         f.write(json.dumps(solver_output))
