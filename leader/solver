@@ -90,12 +90,28 @@ class SMTSParser:
             raw_logs = f.read()
             if "unsat" in raw_logs or "UNSAT" in raw_logs:
                 return "UNSATISFIABLE"
-            elif "sat" in raw_logs or "SAT" in raw_logs:
+            if "sat" in raw_logs or "SAT" in raw_logs:
                 return "SATISFIABLE"
-            elif "error" in raw_logs or ";error" in raw_logs:
+            if "error" in raw_logs or ";error" in raw_logs:
                 return "ERROR"
-            else:
-                return "UNKNOWN"
+
+            return "UNKNOWN"
+
+    @staticmethod
+    def get_return_code(result, return_code):
+        if result == "UNSATISFIABLE":
+            return 20
+        if result == "SATISFIABLE":
+            return 10
+        if result == "UNKNOWN":
+            return 0
+
+        assert result == "ERROR"
+        ## I am not sure if this really holds so I just selected a safe option
+        return -1
+        # assert return_code not in [20, 10, 0]
+        # return return_code
+
 
 if __name__ == "__main__":
     request_directory = sys.argv[1]
@@ -106,10 +122,11 @@ if __name__ == "__main__":
 
     output = runner.run(cmd)
     result = SMTSParser.get_result(output["stdout"])
+    return_code = SMTSParser.get_return_code(result, output["return_code"])
     logging.info(f"RESULT: {result}")
     solver_output = {
-        "return_code": output["return_code"],
-        "result": result,
+        "return_code": return_code,
+        # "result": result,
         "artifacts": {
             "stdout_path": output["stdout"],
             "stderr_path": output["stderr"]
