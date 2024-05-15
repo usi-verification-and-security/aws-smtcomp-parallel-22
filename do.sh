@@ -36,12 +36,15 @@ AWS_INFRA_REPO_INFRA_DIR="$AWS_INFRA_REPO_DIR/infrastructure"
 [[ -d $AWS_INFRA_REPO_DOCKER_DIR ]] || {
   printf "Submodule %s is not cloned yet, updating ...\n" "$AWS_INFRA_REPO_DIR"
   git submodule update --init --recursive || exit $?
-  ln -rsT "$SMTS_DOCKER_DIR" "$AWS_INFRA_REPO_DOCKER_DIR/smts-images" || exit $?
 }
 
 [[ -d $AWS_INFRA_REPO_DOCKER_DIR && -d $AWS_INFRA_REPO_INFRA_DIR ]] || {
   printf "Directories %s and %s do not exist! (This should not have hapenned!)\n" "$AWS_INFRA_REPO_DOCKER_DIR" "$AWS_INFRA_REPO_INFRA_DIR" >&2
   exit 1
+}
+
+[[ -L $AWS_INFRA_REPO_DOCKER_DIR/smts-images ]] || {
+  ln -vrsT "$SMTS_DOCKER_DIR" "$AWS_INFRA_REPO_DOCKER_DIR/smts-images" || exit $?
 }
 
 ################################################################
@@ -310,12 +313,14 @@ function cleanup {
   docker images
   echo
 
-  if diff $TMP <(docker images); then
-    echo "(No difference compared to the state before running the script.)"
-    rm -f $TMP
-  else
-    printf "Docker images differ with the state before running the script!\nThe previous state is in file: %s\n" $TMP >&2
-  fi
+  [[ $ACTION != clean ]] && {
+    if diff $TMP <(docker images); then
+      echo "(No difference compared to the state before running the script.)"
+      rm -f $TMP
+    else
+      printf "Docker images differ with the state before running the script!\nThe previous state is in file: %s\n" $TMP >&2
+    fi
+  }
 
   (( $DO_DELETE_INFRA )) || {
     echo
