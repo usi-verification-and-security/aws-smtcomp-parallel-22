@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SMTS_DOCKER_DIR=docker
+
 AWS_ACCOUNT_NUMBER=683804625309
 AWS_PROJECT=comp24
 
@@ -21,8 +23,31 @@ function usage {
 
 ################################################################
 
+AWS_INFRA_REPO_DIR=aws-infrastructure
+
+[[ -d $AWS_INFRA_REPO_DIR ]] || {
+  printf "Directory %s does not exist! (This should not have hapenned!)\n" "$AWS_INFRA_REPO_DIR" >&2
+  exit 1
+}
+
+AWS_INFRA_REPO_DOCKER_DIR="$AWS_INFRA_REPO_DIR/docker"
+AWS_INFRA_REPO_INFRA_DIR="$AWS_INFRA_REPO_DIR/infrastructure"
+
+[[ -d $AWS_INFRA_REPO_DOCKER_DIR ]] || {
+  printf "Submodule %s is not cloned yet, updating ...\n" "$AWS_INFRA_REPO_DIR"
+  git submodule update --init --recursive || exit $?
+  ln -rsT "$SMTS_DOCKER_DIR" "$AWS_INFRA_REPO_DOCKER_DIR/smts-images" || exit $?
+}
+
+[[ -d $AWS_INFRA_REPO_DOCKER_DIR && -d $AWS_INFRA_REPO_INFRA_DIR ]] || {
+  printf "Directories %s and %s do not exist! (This should not have hapenned!)\n" "$AWS_INFRA_REPO_DOCKER_DIR" "$AWS_INFRA_REPO_INFRA_DIR" >&2
+  exit 1
+}
+
+################################################################
+
 [[ -z $1 ]] && {
-  printf "Specify a tool, e.g. '%s'.\n" mallob >&2
+  printf "Specify a tool, e.g. 'mallob' or 'smts'.\n" >&2
   usage 1
 }
 
@@ -30,7 +55,7 @@ TOOL=$1
 shift
 
 TOOL_IMAGES_DIRBASE=${TOOL}-images
-TOOL_IMAGES_DIR=docker/$TOOL_IMAGES_DIRBASE
+TOOL_IMAGES_DIR="$AWS_INFRA_REPO_DOCKER_DIR/$TOOL_IMAGES_DIRBASE"
 [[ -d $TOOL_IMAGES_DIR ]] || {
   printf "Invalid tool '%s': directory '%s' does not exist.\n" $TOOL "$TOOL_IMAGES_DIR" >&2
   usage 1
@@ -154,18 +179,18 @@ maybe_confirm
 ################################################################
 
 function satcomp_images {
-  cd docker/satcomp-images
+  pushd "$AWS_INFRA_REPO_DOCKER_DIR/satcomp-images"
   sh build_satcomp_images.sh
-  cd ../..
+  popd
 
   docker images
   maybe_confirm
 }
 
 function tool_images {
-  cd "$TOOL_IMAGES_DIR"
+  pushd "$TOOL_IMAGES_DIR"
   sh build_${TOOL}_images.sh
-  cd ../..
+  popd
 
   docker images
   maybe_confirm
@@ -177,16 +202,16 @@ function tool_images {
 }
 
 function run_parallel_docker {
-  cd docker/runner
+  pushd "$AWS_INFRA_REPO_DOCKER_DIR/runner"
   sudo chgrp -R 1000 . && chmod 775 .
   bash run_parallel.sh $TOOL_IMAGE_REPO $TEST_FILE
   maybe_confirm
   rm input.json solver_out.json std{out,err}.log combined_hostfile
-  cd ../..
+  popd
 }
 
 function run_dist_docker {
-  cd docker/runner
+  pushd "$AWS_INFRA_REPO_DOCKER_DIR/runner"
   xterm -e /bin/bash -c "bash run_dist_worker.sh $TOOL_IMAGE_REPO" &
   xterm -e /bin/bash -c "bash run_dist_leader.sh $TOOL_IMAGE_REPO $TEST_FILE" &
   sleep 1
@@ -195,7 +220,7 @@ function run_dist_docker {
   wait
   maybe_confirm
   rm input.json solver_out.json std{out,err}.log combined_hostfile
-  cd ../..
+  popd
 }
 
 (( $DO_RUN_DOCKER )) && {
@@ -208,18 +233,18 @@ function run_dist_docker {
 ################################################################
 
 function build_infra {
-  cd infrastructure
+  pushd "$AWS_INFRA_REPO_INFRA_DIR"
   python3 manage-solver-infrastructure.py --solver-type cloud --mode create --project ${AWS_PROJECT}
-  cd ..
+  popd
 
   docker images
   maybe_confirm
 }
 
 function upload_infra {
-  cd infrastructure
+  pushd "$AWS_INFRA_REPO_INFRA_DIR"
   python3 docker-upload-to-ecr.py --leader $TOOL_IMAGE_REPO:leader --worker $TOOL_IMAGE_REPO:worker --project ${AWS_PROJECT}
-  cd ..
+  popd
 
   aws s3 cp docker/runner/$TEST_FILE $AWS_S3_URL
   aws s3 ls $AWS_S3_URL
@@ -232,9 +257,9 @@ function upload_infra {
 }
 
 function delete_infra {
-  cd infrastructure
+  pushd "$AWS_INFRA_REPO_INFRA_DIR"
   ./delete-solver-infrastructure
-  cd ..
+  popd
 }
 
 (( $DO_DELETE_INFRA )) && {
@@ -246,9 +271,9 @@ function run_infra {
 
   (( $DO_KEEP_ALIVE )) && keep_alive_opt=(--keep-alive 1)
 
-  cd infrastructure
+  pushd "$AWS_INFRA_REPO_INFRA_DIR"
   ./quickstart-run ${keep_alive_opt[@]} --s3-locations $AWS_S3_URL/$TEST_FILEBASE
-  cd ..
+  popd
 }
 
 (( $DO_RUN_INFRA )) && {
@@ -256,9 +281,9 @@ function run_infra {
 }
 
 function shutdown_infra {
-  cd infrastructure
+  pushd "$AWS_INFRA_REPO_INFRA_DIR"
   python3 ecs-config shutdown
-  cd ..
+  popd
 }
 
 (( $DO_SHUTDOWN_INFRA )) && {

@@ -1,0 +1,3 @@
+[submodule "aws-infrastructure"]
+	path = aws-infrastructure
+	url = git@github.com:Tomaqa/aws-batch-comp-infrastructure-sample.git

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+exec bash do.sh smts smt infra-all -n
