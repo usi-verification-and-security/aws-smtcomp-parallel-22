@@ -3,7 +3,7 @@
 AWS_ACCOUNT_NUMBER=683804625309
 AWS_PROJECT=comp24
 
-ACTION_REGEX='docker|docker-build|docker-run|infra|infra-build|infra-delete|infra-run|nop'
+ACTION_REGEX='docker-all|docker-build|docker-run|infra-all|infra-build|infra-delete|infra-run|infra-shutdown|nop'
 
 DOMAIN_REGEX='sat|smt'
 
@@ -14,6 +14,7 @@ function usage {
   printf "OPTIONS:\n"
   printf "\t-C\t\tClean up at the end.\n"
   printf "\t-n\t\tDo not confirm (usually).\n"
+  printf "\t-k\t\tKeep alive.\n"
 
   [[ -n $1 ]] && exit $1
 }
@@ -59,11 +60,13 @@ DO_RUN_DOCKER=0
 DO_BUILD_INFRA=0
 DO_DELETE_INFRA=0
 DO_RUN_INFRA=0
+DO_SHUTDOWN_INFRA=0
 DO_CLEANUP=0
 DO_CONFIRM=1
+DO_KEEP_ALIVE=0
 
 case $ACTION in
-  docker)
+  docker-all)
     DO_BUILD_DOCKER=1
     DO_RUN_DOCKER=1
     ;;
@@ -73,7 +76,7 @@ case $ACTION in
   docker-run)
     DO_RUN_DOCKER=1
     ;;
-  infra)
+  infra-all)
     DO_BUILD_DOCKER=1
     DO_BUILD_INFRA=1
     DO_RUN_INFRA=1
@@ -88,6 +91,9 @@ case $ACTION in
   infra-run)
     DO_RUN_INFRA=1
     ;;
+  infra-shutdown)
+    DO_SHUTDOWN_INFRA=1
+    ;;
   nop)
     DO_CONFIRM=0
     ;;
@@ -97,10 +103,11 @@ case $ACTION in
     ;;
 esac
 
-while getopts "Cn" opt; do
+while getopts "Cnk" opt; do
   case $opt in
     C) DO_CLEANUP=1;;
     n) DO_CONFIRM=0;;
+    k) DO_KEEP_ALIVE=1;;
     \?) printf -- "Unrecognized option: -%s\n" "$OPTARG" >&2; usage 1;;
     :) printf -- "Option -%s requires an argument.\n" "$OPTARG" >&2; usage 1;;
   esac
@@ -109,7 +116,10 @@ done
 ################################################################
 
 function maybe_confirm {
-  (( $DO_CONFIRM )) || return 0
+  (( $DO_CONFIRM )) || {
+    echo
+    return 0
+  }
   echo "Confirm to continue ..."
   read
 }
@@ -130,6 +140,7 @@ esac
 TEST_FILE=experiment/$TEST_FILEBASE
 
 AWS_S3_URL=s3://${AWS_ACCOUNT_NUMBER}-us-east-1-${AWS_PROJECT}
+AWS_IMAGE_REPO=${AWS_ACCOUNT_NUMBER}.dkr.ecr.us-east-1.amazonaws.com/${AWS_PROJECT}
 
 set -e
 
@@ -146,6 +157,7 @@ function satcomp_images {
   cd docker/satcomp-images
   sh build_satcomp_images.sh
   cd ../..
+
   docker images
   maybe_confirm
 }
@@ -154,6 +166,7 @@ function tool_images {
   cd "$TOOL_IMAGES_DIR"
   sh build_${TOOL}_images.sh
   cd ../..
+
   docker images
   maybe_confirm
 }
@@ -186,6 +199,7 @@ function run_dist_docker {
 }
 
 (( $DO_RUN_DOCKER )) && {
+  (( $DO_KEEP_ALIVE )) && printf "Warning: 'keep-alive' option is currently not supported for action '%s'.\n" $ACTION >&2
   docker network inspect $TOOL_NETWORK &>/dev/null || docker network create $TOOL_NETWORK
   run_parallel_docker
   run_dist_docker
@@ -197,6 +211,9 @@ function build_infra {
   cd infrastructure
   python3 manage-solver-infrastructure.py --solver-type cloud --mode create --project ${AWS_PROJECT}
   cd ..
+
+  docker images
+  maybe_confirm
 }
 
 function upload_infra {
@@ -225,8 +242,12 @@ function delete_infra {
 }
 
 function run_infra {
+  local keep_alive_opt=()
+
+  (( $DO_KEEP_ALIVE )) && keep_alive_opt=(--keep-alive 1)
+
   cd infrastructure
-  ./quickstart-run --s3-locations $AWS_S3_URL/$TEST_FILEBASE
+  ./quickstart-run ${keep_alive_opt[@]} --s3-locations $AWS_S3_URL/$TEST_FILEBASE
   cd ..
 }
 
@@ -234,27 +255,43 @@ function run_infra {
   run_infra
 }
 
+function shutdown_infra {
+  cd infrastructure
+  python3 ecs-config shutdown
+  cd ..
+}
+
+(( $DO_SHUTDOWN_INFRA )) && {
+  shutdown_infra
+}
+
 ################################################################
 
 function cleanup {
   echo "Cleanup ..."
-  docker rmi satcomp-infrastructure:{common,leader,worker}
-  docker rmi $TOOL_IMAGE_REPO:{common,leader,worker}
-  docker network rm $TOOL_NETWORK
+  docker image inspect satcomp-infrastructure:leader &>/dev/null && docker rmi satcomp-infrastructure:{common,leader,worker}
+  docker image inspect $TOOL_IMAGE_REPO:leader &>/dev/null && docker rmi $TOOL_IMAGE_REPO:{common,leader,worker}
+  docker image inspect $AWS_IMAGE_REPO:leader &>/dev/null && docker rmi $AWS_IMAGE_REPO:{leader,worker}
+  docker network inspect $TOOL_NETWORK &>/dev/null && docker network rm $TOOL_NETWORK
   echo "Pruning docker images removes all dangling <none>/<none> images - not dangerous unless you had some of your own that you still want to use ..."
   echo "Current images:"
   docker images
   docker image prune
   echo -e "\nDocker images at the end:"
   docker images
+  echo
 
-  diff $TMP <(docker images) || {
+  if diff $TMP <(docker images); then
+    echo "(No difference compared to the state before running the script.)"
+    rm -f $TMP
+  else
     printf "Docker images differ with the state before running the script!\nThe previous state is in file: %s\n" $TMP >&2
-    exit 10
-  }
-  echo "(No difference compared to the state before running the script.)"
+  fi
 
-  rm -f $TMP
+  (( $DO_DELETE_INFRA )) || {
+    echo
+    delete_infra
+  }
 }
 
 (( $DO_CLEANUP )) && {
