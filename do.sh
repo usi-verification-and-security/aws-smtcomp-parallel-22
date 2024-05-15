@@ -5,7 +5,7 @@ SMTS_DOCKER_DIR=docker
 AWS_ACCOUNT_NUMBER=683804625309
 AWS_PROJECT=comp24
 
-ACTION_REGEX='docker-all|docker-build|docker-run|infra-all|infra-build|infra-delete|infra-run|infra-shutdown|nop'
+ACTION_REGEX='docker-all|docker-build|docker-run|infra-all|infra-build|infra-delete|infra-run|infra-shutdown|clean|nop'
 
 DOMAIN_REGEX='sat|smt'
 
@@ -119,6 +119,9 @@ case $ACTION in
   infra-shutdown)
     DO_SHUTDOWN_INFRA=1
     ;;
+  clean)
+    DO_CLEANUP=1
+    ;;
   nop)
     DO_CONFIRM=0
     ;;
@@ -162,7 +165,8 @@ case $DOMAIN in
     exit -1
     ;;
 esac
-TEST_FILE=experiment/$TEST_FILEBASE
+TEST_FILE_RELATIVE=experiment/$TEST_FILEBASE
+TEST_FILE_ABSOLUTE="$AWS_INFRA_REPO_DOCKER_DIR/runner/$TEST_FILE_RELATIVE"
 
 AWS_S3_URL=s3://${AWS_ACCOUNT_NUMBER}-us-east-1-${AWS_PROJECT}
 AWS_IMAGE_REPO=${AWS_ACCOUNT_NUMBER}.dkr.ecr.us-east-1.amazonaws.com/${AWS_PROJECT}
@@ -204,7 +208,7 @@ function tool_images {
 function run_parallel_docker {
   pushd "$AWS_INFRA_REPO_DOCKER_DIR/runner"
   sudo chgrp -R 1000 . && chmod 775 .
-  bash run_parallel.sh $TOOL_IMAGE_REPO $TEST_FILE
+  bash run_parallel.sh $TOOL_IMAGE_REPO $TEST_FILE_RELATIVE
   maybe_confirm
   rm input.json solver_out.json std{out,err}.log combined_hostfile
   popd
@@ -213,7 +217,7 @@ function run_parallel_docker {
 function run_dist_docker {
   pushd "$AWS_INFRA_REPO_DOCKER_DIR/runner"
   xterm -e /bin/bash -c "bash run_dist_worker.sh $TOOL_IMAGE_REPO" &
-  xterm -e /bin/bash -c "bash run_dist_leader.sh $TOOL_IMAGE_REPO $TEST_FILE" &
+  xterm -e /bin/bash -c "bash run_dist_leader.sh $TOOL_IMAGE_REPO $TEST_FILE_RELATIVE" &
   sleep 1
   docker ps
   wait
@@ -246,7 +250,7 @@ function upload_infra {
   python3 docker-upload-to-ecr.py --leader $TOOL_IMAGE_REPO:leader --worker $TOOL_IMAGE_REPO:worker --project ${AWS_PROJECT}
   popd
 
-  aws s3 cp docker/runner/$TEST_FILE $AWS_S3_URL
+  aws s3 cp "$TEST_FILE_ABSOLUTE" $AWS_S3_URL
   aws s3 ls $AWS_S3_URL
   maybe_confirm
 }
