@@ -1,74 +1,64 @@
-# SMTComp Cloud cube-and-conquer Solver 
+# SMT-COMP Parallel & Cloud Track Participant: SMTS
 
-This project provides scripts to build AWS resources including the Elastic Compute Cloud (EC2) service, the Elastic Container Registry (ECR) service, the Elastic Container Service (ECS) service, the Simple Storage Service, the Elastic File System (EFS) service, and  Simple Queue Service by which we will be building and running our solvers.
+This repository provides scripts to build Docker images and maintain AWS resources
+of our solver
+[SMTS](https://github.com/usi-verification-and-security/SMTS/tree/cube-and-conquer),
+in order to participate in SMT-COMP Parallel & Cloud Track
+2024.
 
+We follow the instructions given by the organizers [here](https://github.com/aws-samples/aws-batch-comp-infrastructure-sample).
+We also use a [fork](https://github.com/Tomaqa/aws-batch-comp-infrastructure-sample) of the repository as a submodule and reuse some of their sample scripts.
 
-To simplify the solver construction process, two base Docker images are provided that manage most of the infrastructure necessary for solvers and interface to AWS resources which are described in the README.md file in the [https://github.com/aws-samples/aws-batch-comp-infrastructure-sample](https://github.com/aws-samples/aws-batch-comp-infrastructure-sample) repository.
-
-Repository: [Link](https://github.com/usi-verification-and-security/SMTS/tree/cube-and-conquer)
-
-Web Page: [Link](http://verify.inf.usi.ch/opensmt2)
+Our parallel & cloud solver SMTS computes on top of our SMT solver [OpenSMT](https://github.com/usi-verification-and-security/opensmt).
 
 ## Prerequisites
-- [Docker should be installed on the machine](https://docs.docker.com/desktop/install/mac-install/)
-  The cube-and-conquer docker images are built on top of the base containers smtcomp-base:leader and smtcomp-base:worker.
+
+- bash
 - [python3](https://www.python.org/)
 - [awscli](https://aws.amazon.com/cli/)
 - [boto3](https://aws.amazon.com/sdk-for-python/)
 - [docker](https://www.docker.com/)
+- [git](https://git-scm.com/)
 
-## How to Build
-First start by downloading aws-backend infrastructure:
-`./download_aws_infrastructure.sh`
+## Download
 
-Run the following command to get ami:
-```text
-aws --profile usiverify  ssm get-parameters --names /aws/service/ecs/optimized-ami/amazon-linux-2/recommended
+Clone using git:
+```
+git clone --recurse-submodules https://github.com/usi-verification-and-security/smts-smtcomp-aws.git
 ```
 
-To set up the account resources for cloud track, run the create-solver-infrastructure script:
-```text 
-./create-solver-infrastructure --profile [usiverify] --project [smtscq] --instance m6i.4xlarge --memory 61000 --ami [ami-014ddabf5947b9cbe]
+## Run Script
+
+Before running scripts that interact with AWS resources, it is necessary to create an account and set up your credentials on your local machine. For this, follow the link above with the instructions given by the organizers.
+
+We provide `runme` Bash script which should provide all functionality necessary for building and uploading images to AWS.
+Simply run
 ```
-
-To set up the account resources and scripts for building and running SMTS on the parallel track we have provided a different branch as follows:
-
-Parallel [Link](https://github.com/usi-verification-and-security/aws-smts/tree/parallel-cube-and-conquer)
-
-To create the base docker Leader and Worker images for solvers run the following command:
-`cd aws-batch-comp-infrastructure-sample/src` && `build_docker_images.sh`
-
-To build the entire cube-and-conquer containers and push them to ecr:
-
-(Dockers will be built with the PROJECT_NAME : smtscq)
-
-
-Run the `buildAndPush_docker_images.sh <Account Number> <Region>`.
-
-## How to Run
-First make sure you have instance at your s3 bucket by:
-```text
-aws --profile [usiverify] s3 ls s3://<Aws-AccountNumber>-<Region>-satcompbucket
+./runme <mode>
 ```
-You can upload instance into s3 bucket by:
-```text
-aws --profile [usiverify] s3 cp test.smt2.bz2 s3://<Aws-AccountNumber>-<Region>-satcompbucket
+where `<mode>` is either `cloud` or `parallel`.
+Except for uploading the images, it will also run the solver on the AWS cloud on a sample benchmark at the end, to ensure that everything works.
+
+Note that the script will shut down the AWS resources but will not delete them (neither from AWS nor from your local machine).
+
+### Internal script
+
+Script `runme` is just a wrapper of internal `do.sh` script which also allows to do only some particular steps of the procedure.
+However, using this script should be necessary only for the developers of this repository.
+
+The usage of the script is
 ```
-To start the cluster run:
-```text
-./update_instances --profile [usiverify] --option setup --workers [n]
+bash do.sh <tool> <domain> <action> [options]
 ```
-
-To turn off the cluster run:
-```text
-./update_instances --profile [usiverify] --option shutdown
+The script can be used also for `mallob` SAT solver.
+Assuming that the user wants to use our SMTS solver, the usage is
 ```
-
-To submit a job and execute the tool run:
-```text
-./send_message --profile [usiverify] --location s3://<Aws-AccountNumber>-<Region>-satcompbucket/test.smt2.bz2 --workers [n]
+bash do.sh smts smt <action> [options]
 ```
+See the output of `bash do.sh` for available actions and options.
+The actions `docker-*` are related to managing docker images on your local machine.
+The actions `infra-*` are related to managing docker images on your AWS account. Switching between the parallel and the cloud track is done via `-P` option.
 
+To clean up, that is, to wipe all temporary files, docker images and also AWS resources, use action `clean`. It is also possible to use `-c` option in combination with an action.
 
-
-
+To _not_ shut down the AWS resources at the end, that is, to keep them alive, use `-k` option (cloud track only). However, accessing files in the S3 bucket is possible even after shutting down.

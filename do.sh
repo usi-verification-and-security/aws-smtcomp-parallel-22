@@ -11,11 +11,11 @@ DOMAIN_REGEX='sat|smt'
 
 function usage {
   printf "USAGE: %s <tool> <domain> <action> [options]\n" "$0"
-  printf "DOMAINS %s:\n" "$DOMAIN_REGEX"
-  printf "ACTIONS %s:\n" "$ACTION_REGEX"
+  printf "DOMAINS: %s\n" "$DOMAIN_REGEX"
+  printf "ACTIONS: %s\n" "$ACTION_REGEX"
   printf "OPTIONS:\n"
   printf "\t-P\t\tManage parallel track. Otherwise, manage cloud track.\n"
-  printf "\t-C\t\tClean up at the end.\n"
+  printf "\t-c\t\tClean up at the end.\n"
   printf "\t-n\t\tDo not confirm (usually).\n"
   printf "\t-k\t\tKeep alive.\n"
 
@@ -141,10 +141,10 @@ case $ACTION in
     ;;
 esac
 
-while getopts "PCnk" opt; do
+while getopts "Pcnk" opt; do
   case $opt in
     P) DO_CLOUD_TRACK=0;;
-    C) DO_CLEANUP=1;;
+    c) DO_CLEANUP=1;;
     n) DO_CONFIRM=0;;
     k) DO_KEEP_ALIVE=1;;
     \?) printf -- "Unrecognized option: -%s\n" "$OPTARG" >&2; usage 1;;
