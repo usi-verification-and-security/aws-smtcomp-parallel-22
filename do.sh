@@ -5,7 +5,7 @@ SMTS_DOCKER_DIR=docker
 AWS_ACCOUNT_NUMBER=683804625309
 AWS_PROJECT=comp24
 
-ACTION_REGEX='docker-all|docker-build|docker-run|infra-all|infra-build|infra-delete|infra-run|infra-shutdown|clean|nop'
+ACTION_REGEX='docker-all|docker-build|docker-run|infra-all|infra-build|infra-upload|infra-delete|infra-run|infra-shutdown|clean|nop'
 
 DOMAIN_REGEX='sat|smt'
 
@@ -86,6 +86,7 @@ shift
 DO_BUILD_DOCKER=0
 DO_RUN_DOCKER=0
 DO_BUILD_INFRA=0
+DO_UPLOAD_INFRA=0
 DO_DELETE_INFRA=0
 DO_RUN_INFRA=0
 DO_SHUTDOWN_INFRA=0
@@ -107,11 +108,15 @@ case $ACTION in
   infra-all)
     DO_BUILD_DOCKER=1
     DO_BUILD_INFRA=1
+    DO_UPLOAD_INFRA=1
     DO_RUN_INFRA=1
     ;;
   infra-build)
     DO_BUILD_DOCKER=1
     DO_BUILD_INFRA=1
+    ;;
+  infra-upload)
+    DO_UPLOAD_INFRA=1
     ;;
   infra-delete)
     DO_DELETE_INFRA=1
@@ -240,12 +245,18 @@ function run_dist_docker {
 ################################################################
 
 function build_infra {
+  aws sts get-caller-identity
+
   pushd "$AWS_INFRA_REPO_INFRA_DIR"
   python3 manage-solver-infrastructure.py --solver-type cloud --mode create --project ${AWS_PROJECT}
   popd
 
   docker images
   maybe_confirm
+}
+
+(( $DO_BUILD_INFRA )) && {
+  build_infra
 }
 
 function upload_infra {
@@ -258,8 +269,7 @@ function upload_infra {
   maybe_confirm
 }
 
-(( $DO_BUILD_INFRA )) && {
-  build_infra
+(( $DO_UPLOAD_INFRA )) && {
   upload_infra
 }
 
