@@ -59,6 +59,13 @@ See the output of `bash do.sh` for available actions and options.
 The actions `docker-*` are related to managing docker images on your local machine.
 The actions `infra-*` are related to managing docker images on your AWS account. Switching between the parallel and the cloud track is done via `-P` option.
 
-To clean up, that is, to wipe all temporary files, docker images and also AWS resources, use action `clean`. It is also possible to use `-c` option in combination with an action.
+To delete remote AWS resources, use action `infra-delete`.
+This is useful for example when, after uploading, one wants to switch from one track to another.
+Example sequence of actions and options: `infra-all`, then `infra-delete`, then `infra-all -P` (first cloud track, then parallel track).
 
-To _not_ shut down the AWS resources at the end, that is, to keep them alive, use `-k` option (cloud track only). However, accessing files in the S3 bucket is possible even after shutting down.
+To clean up, that is, to wipe all temporary files, docker images and also remote AWS resources, use action `clean`. It also implies `infra-delete`.
+It is also possible to use `-c` option in combination with an action.
+
+To _not_ shut down the AWS resources at the end, that is, to keep them alive, use `-k` option (cloud track only).
+Later, one should use action `infra-shutdown`.
+Note that accessing files in the S3 bucket is possible even without keeping alive, that is, even after shutting down.
