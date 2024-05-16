@@ -14,6 +14,7 @@ function usage {
   printf "DOMAINS %s:\n" "$DOMAIN_REGEX"
   printf "ACTIONS %s:\n" "$ACTION_REGEX"
   printf "OPTIONS:\n"
+  printf "\t-P\t\tManage parallel track. Otherwise, manage cloud track.\n"
   printf "\t-C\t\tClean up at the end.\n"
   printf "\t-n\t\tDo not confirm (usually).\n"
   printf "\t-k\t\tKeep alive.\n"
@@ -90,6 +91,7 @@ DO_UPLOAD_INFRA=0
 DO_DELETE_INFRA=0
 DO_RUN_INFRA=0
 DO_SHUTDOWN_INFRA=0
+DO_CLOUD_TRACK=1
 DO_CLEANUP=0
 DO_CONFIRM=1
 DO_KEEP_ALIVE=0
@@ -139,8 +141,9 @@ case $ACTION in
     ;;
 esac
 
-while getopts "Cnk" opt; do
+while getopts "PCnk" opt; do
   case $opt in
+    P) DO_CLOUD_TRACK=0;;
     C) DO_CLEANUP=1;;
     n) DO_CONFIRM=0;;
     k) DO_KEEP_ALIVE=1;;
@@ -222,7 +225,7 @@ function run_parallel_docker {
   popd
 }
 
-function run_dist_docker {
+function run_cloud_docker {
   pushd "$AWS_INFRA_REPO_DOCKER_DIR/runner"
   xterm -e /bin/bash -c "bash run_dist_worker.sh $TOOL_IMAGE_REPO" &
   xterm -e /bin/bash -c "bash run_dist_leader.sh $TOOL_IMAGE_REPO $TEST_FILE_RELATIVE" &
@@ -238,17 +241,23 @@ function run_dist_docker {
 (( $DO_RUN_DOCKER )) && {
   (( $DO_KEEP_ALIVE )) && printf "Warning: 'keep-alive' option is currently not supported for action '%s'.\n" $ACTION >&2
   docker network inspect $TOOL_NETWORK &>/dev/null || docker network create $TOOL_NETWORK
-  run_parallel_docker
-  run_dist_docker
+  if (( $DO_CLOUD_TRACK )); then
+    run_cloud_docker
+  else
+    run_parallel_docker
+  fi
 }
 
 ################################################################
 
 function build_infra {
+  local solver_type=cloud
+  (( $DO_CLOUD_TRACK )) || solver_type=parallel
+
   aws sts get-caller-identity
 
   pushd "$AWS_INFRA_REPO_INFRA_DIR"
-  python3 manage-solver-infrastructure.py --solver-type cloud --mode create --project ${AWS_PROJECT}
+  python3 manage-solver-infrastructure.py --solver-type $solver_type --mode create --project ${AWS_PROJECT}
   popd
 
   docker images
