@@ -26,6 +26,7 @@ Clone using git:
 ```
 git clone --recurse-submodules https://github.com/usi-verification-and-security/smts-smtcomp-aws.git
 ```
+(It should work even without option `--recurse-submodules` though.)
 
 ## Run Script
 
