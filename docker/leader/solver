@@ -57,15 +57,20 @@ class Runner:
             return json.loads(f.read())
 
     def create_hostfile(self, ips, leader_ip, request_dir):
-        totalWorkerNodes=0
         hostfile_path = os.path.join(request_dir, 'combined_hostfile')
         with open(hostfile_path, 'w+') as f:
-            for ip in ips:
-                if ip != leader_ip:
+            if len(ips) == 1:
+                f.write(f"{leader_ip}\n")
+                totalWorkerNodes = 1
+            else:
+                totalWorkerNodes = 0
+                for ip in ips:
+                    if ip == leader_ip:
+                        continue
                     totalWorkerNodes += 1
-                    f.write(f'{ip}')
-                    f.write('\n')
-            return hostfile_path, totalWorkerNodes
+                    f.write(f"{ip}\n")
+
+        return hostfile_path, totalWorkerNodes
 
     def get_command(self, input_json):
         problem_path = input_json.get("formula_file")
