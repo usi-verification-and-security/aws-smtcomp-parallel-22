@@ -24,6 +24,16 @@ function usage {
 
 ################################################################
 
+function pushd {
+    command pushd "$@" >/dev/null
+}
+
+function popd {
+    command popd "$@" >/dev/null
+}
+
+################################################################
+
 AWS_INFRA_REPO_DIR=aws-infrastructure
 
 [[ -d $AWS_INFRA_REPO_DIR ]] || {
